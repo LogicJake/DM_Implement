@@ -101,9 +101,38 @@ class LocalMethods(object):
         df_AA_list = df_common_neighbor.groupby(['source_x', 'source_y']).sum()
         df_AA_list = df_AA_list.reset_index()
 
-        df_AA_list.rename(columns={'count': 'similarity'}, inplace=True)
-        df_AA_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        df_AA_list.rename(columns={'count': 'similarity', 'source_x': 'source', 'source_y': 'target'}, inplace=True)
         return df_AA_list
+
+    def cal_RA(self):
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'count'}, inplace=True)
+        """
+        get common neighbours
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor = pd.merge(df_common_neighbor, df_neighbor_count, left_on=['target'], right_on=['source'],
+                                      how='left').dropna()
+
+        df_common_neighbor = df_common_neighbor[['source_x', 'source_y', 'count']]
+        df_common_neighbor['count'] = df_common_neighbor['count'].map(lambda x: 1.0 / x)
+
+        df_RA_list = df_common_neighbor.groupby(['source_x', 'source_y']).sum()
+        df_RA_list = df_RA_list.reset_index()
+
+        df_RA_list.rename(columns={'source_x': 'source', 'source_y': 'target', 'count': 'similarity'}, inplace=True)
+        print(df_RA_list.head(10))
+        return df_RA_list
 
 
 def test_similarity():
@@ -112,7 +141,7 @@ def test_similarity():
     # df_edge_list = pd.DataFrame({'source': [1, 1, 2], 'target': [2, 3, 3]})
 
     test_local = LocalMethods(df_edge_list)
-    test_local.cal_AA()
+    test_local.cal_RA()
 
 
 if __name__ == '__main__':
