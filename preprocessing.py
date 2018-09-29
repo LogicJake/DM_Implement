@@ -37,7 +37,8 @@ class NodeReNumber(object):
         df_node = pd.read_csv(self.nodeName, names=names, delim_whitespace=True, low_memory=False)
         df_node = df_node[['nodeID', 'label']]
 
-        labels = set(df_node['label'].tolist())
+        labels = list(set(df_node['label'].tolist()))
+        labels.sort()
         nodes_list = df_node['nodeID'].tolist()
 
         nodes_list_1 = df_edge['source'].tolist()
@@ -45,6 +46,8 @@ class NodeReNumber(object):
 
         nodes_list = nodes_list + nodes_list_1 + nodes_list_2
         nodes_list = list(set(nodes_list))
+        # 排序 便于复现
+        nodes_list.sort()
 
         self.nodeName2ID = {}
         for i, tName in enumerate(nodes_list):
@@ -92,7 +95,7 @@ class NodeReNumber(object):
 
     def transform(self):
         self.get_node_map_dict()
-        self.transform_edge_new()
+        self.transform_edge()
         self.transform_node()
 
 
