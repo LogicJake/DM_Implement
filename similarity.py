@@ -1,5 +1,6 @@
 # -*-coding:utf8 -*-
 import math
+import os
 
 import pandas as pd
 
@@ -230,6 +231,395 @@ class LocalMethods(object):
 
         df_RA_CNI_list.rename(columns={'RACNI': 'similarity', 'source_x': 'source', 'source_y': 'target'}, inplace=True)
         return df_RA_CNI_list
+
+    # not read 
+    def cal_PA(self):
+        """
+        this method is implemented for preferential attachment index
+        input: self.df_edge_list
+        output: df_PA_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        all_nodes = self.df_edge_list['source'].tolist()
+        ttt = self.df_edge_list['target'].tolist()
+        all_nodes.extend(ttt)
+        print
+        'all nodes number is ', len(set(all_nodes))
+
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        # print df_neighbor_count.head()
+        df_neighbor_count.rename(columns={'target': 'count1'}, inplace=True)
+
+        df_PA_list = pd.merge(df_all_nodes_pair, df_neighbor_count, left_on=['source'], right_on=['source'],
+                              how='left').fillna(0)
+        # print df_PA_list.head()
+        # print 'gg PA',df_PA_list.shape
+        df_PA_list = pd.merge(df_PA_list, df_neighbor_count, left_on=['target'], right_on=['source'],
+                              how='left').fillna(0)
+        # print 'gg PA',df_PA_list.shape
+        df_PA_list['similarity'] = df_PA_list['count1_x'] * df_PA_list['count1_y']
+        df_PA_list = df_PA_list[['source_x', 'source_y', 'similarity']]
+
+        # print 'gg PA',df_PA_list.shape
+        df_PA_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        # print 'gg PA',df_PA_list.head()
+        df_PA_list = df_PA_list.drop_duplicates()
+        return df_PA_list
+
+    def cal_JC(self):
+
+        """
+        this method is implemented for Jacccard Coefficient
+        input: self.df_edge_list
+        output: df_JC_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'nei_count'}, inplace=True)
+
+        """
+        get common neighbours
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor_count = df_common_neighbor.groupby(['source_x', 'source_y']).count()
+        df_common_neighbor_count = df_common_neighbor_count.reset_index()
+        # print df_common_neighbor_count
+
+        df_common_neighbor_count.rename(columns={'target': 'CN'}, inplace=True)
+
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_count, df_neighbor_count,
+                                                          left_on=['source_x'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor = df_common_neighbor_with_total_neighbor[
+            ['source_x', 'source_y', 'CN', 'nei_count']]
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_with_total_neighbor, df_neighbor_count,
+                                                          left_on=['source_y'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor['total_neighbor'] = df_common_neighbor_with_total_neighbor[
+                                                                       'nei_count_x'] + \
+                                                                   df_common_neighbor_with_total_neighbor[
+                                                                       'nei_count_y'] - \
+                                                                   df_common_neighbor_with_total_neighbor['CN']
+
+        df_common_neighbor_with_total_neighbor['similarity'] = df_common_neighbor_with_total_neighbor['CN'] / \
+                                                               df_common_neighbor_with_total_neighbor['total_neighbor']
+
+        df_JC_list = df_common_neighbor_with_total_neighbor[['source_x', 'source_y', 'similarity']].copy()
+
+        df_JC_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        return df_JC_list
+
+    def cal_SA(self):
+
+        """
+        this method is implemented for Salton Index
+        input: self.df_edge_list
+        output: df_SA_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'nei_count'}, inplace=True)
+
+        """
+        get common neighbours
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor_count = df_common_neighbor.groupby(['source_x', 'source_y']).count()
+        df_common_neighbor_count = df_common_neighbor_count.reset_index()
+        # print df_common_neighbor_count
+
+        df_common_neighbor_count.rename(columns={'target': 'CN'}, inplace=True)
+
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_count, df_neighbor_count,
+                                                          left_on=['source_x'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor = df_common_neighbor_with_total_neighbor[
+            ['source_x', 'source_y', 'CN', 'nei_count']]
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_with_total_neighbor, df_neighbor_count,
+                                                          left_on=['source_y'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor['nei_mul_nei'] = df_common_neighbor_with_total_neighbor['nei_count_x'] * \
+                                                                df_common_neighbor_with_total_neighbor['nei_count_y']
+
+        df_common_neighbor_with_total_neighbor['nei_mul_nei'] = map(lambda x: pow(x, 0.5),
+                                                                    df_common_neighbor_with_total_neighbor[
+                                                                        'nei_mul_nei'])
+        df_common_neighbor_with_total_neighbor['similarity'] = df_common_neighbor_with_total_neighbor['CN'] / \
+                                                               df_common_neighbor_with_total_neighbor['nei_mul_nei']
+
+        df_SA_list = df_common_neighbor_with_total_neighbor[['source_x', 'source_y', 'similarity']].copy()
+
+        df_SA_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        return df_SA_list
+
+    def cal_SO(self):
+
+        """
+        this method is implemented for Sørensen Index
+        input: self.df_edge_list
+        output: df_SO_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'nei_count'}, inplace=True)
+
+        """
+        get common neighbours
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor_count = df_common_neighbor.groupby(['source_x', 'source_y']).count()
+        df_common_neighbor_count = df_common_neighbor_count.reset_index()
+        # print df_common_neighbor_count
+
+        df_common_neighbor_count.rename(columns={'target': 'CN'}, inplace=True)
+
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_count, df_neighbor_count,
+                                                          left_on=['source_x'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor = df_common_neighbor_with_total_neighbor[
+            ['source_x', 'source_y', 'CN', 'nei_count']]
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_with_total_neighbor, df_neighbor_count,
+                                                          left_on=['source_y'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor['nei_add_nei'] = df_common_neighbor_with_total_neighbor['nei_count_x'] + \
+                                                                df_common_neighbor_with_total_neighbor['nei_count_y']
+
+        df_common_neighbor_with_total_neighbor['similarity'] = 2 * df_common_neighbor_with_total_neighbor['CN'] / \
+                                                               df_common_neighbor_with_total_neighbor['nei_add_nei']
+
+        df_SO_list = df_common_neighbor_with_total_neighbor[['source_x', 'source_y', 'similarity']].copy()
+
+        df_SO_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        return df_SO_list
+
+    def cal_HPI(self):
+
+        """
+        this method is implemented for Hub Promoted Index
+        input: self.df_edge_list
+        output: df_HPI_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'nei_count'}, inplace=True)
+
+        """
+        get common neighbours
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor_count = df_common_neighbor.groupby(['source_x', 'source_y']).count()
+        df_common_neighbor_count = df_common_neighbor_count.reset_index()
+        # print df_common_neighbor_count
+
+        df_common_neighbor_count.rename(columns={'target': 'CN'}, inplace=True)
+
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_count, df_neighbor_count,
+                                                          left_on=['source_x'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor = df_common_neighbor_with_total_neighbor[
+            ['source_x', 'source_y', 'CN', 'nei_count']]
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_with_total_neighbor, df_neighbor_count,
+                                                          left_on=['source_y'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor['nei_min'] = df_common_neighbor_with_total_neighbor[
+            ['nei_count_x', 'nei_count_y']].min(axis=1)
+        # print df_common_neighbor_with_total_neighbor.head()
+
+        df_common_neighbor_with_total_neighbor['similarity'] = df_common_neighbor_with_total_neighbor['CN'] / \
+                                                               df_common_neighbor_with_total_neighbor['nei_min']
+
+        df_HPI_list = df_common_neighbor_with_total_neighbor[['source_x', 'source_y', 'similarity']].copy()
+
+        df_HPI_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        return df_HPI_list
+
+    def cal_HDI(self):
+
+        """
+        this method is implemented for Hub Depressed Index
+        input: self.df_edge_list
+        output: df_HDI_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'nei_count'}, inplace=True)
+
+        """
+        get common neighbours
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor_count = df_common_neighbor.groupby(['source_x', 'source_y']).count()
+        df_common_neighbor_count = df_common_neighbor_count.reset_index()
+        # print df_common_neighbor_count
+
+        df_common_neighbor_count.rename(columns={'target': 'CN'}, inplace=True)
+
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_count, df_neighbor_count,
+                                                          left_on=['source_x'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor = df_common_neighbor_with_total_neighbor[
+            ['source_x', 'source_y', 'CN', 'nei_count']]
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_with_total_neighbor, df_neighbor_count,
+                                                          left_on=['source_y'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor['nei_min'] = df_common_neighbor_with_total_neighbor[
+            ['nei_count_x', 'nei_count_y']].max(axis=1)
+        # print df_common_neighbor_with_total_neighbor.head()
+
+        df_common_neighbor_with_total_neighbor['similarity'] = df_common_neighbor_with_total_neighbor['CN'] / \
+                                                               df_common_neighbor_with_total_neighbor['nei_min']
+
+        df_HDI_list = df_common_neighbor_with_total_neighbor[['source_x', 'source_y', 'similarity']].copy()
+
+        df_HDI_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+
+        # print df_HDI_list.head()
+        return df_HDI_list
+
+    def cal_LLHN(self):
+
+        """
+        this method is implemented for Local Leicht-Holme-Newman Index
+        input: self.df_edge_list
+        output: df_LLHN_list
+        """
+
+        df_edge_list_reverse = pd.DataFrame()
+        df_edge_list_reverse['source'] = self.df_edge_list['target']
+        df_edge_list_reverse['target'] = self.df_edge_list['source']
+        # print df_edge_list_reverse
+
+        df_all_nodes_pair = pd.concat([df_edge_list_reverse, self.df_edge_list])
+        df_neighbor_count = df_all_nodes_pair.groupby(['source']).count()
+        df_neighbor_count = df_neighbor_count.reset_index()
+        df_neighbor_count.rename(columns={'target': 'nei_count'}, inplace=True)
+
+        """
+        get common neighbours
+        drwxr-xr-x 3
+        """
+
+        df_common_neighbor = pd.merge(df_all_nodes_pair, df_all_nodes_pair, on=['target'], how='left').dropna()
+        df_common_neighbor = df_common_neighbor[df_common_neighbor['source_x'] != df_common_neighbor['source_y']]
+
+        df_common_neighbor_count = df_common_neighbor.groupby(['source_x', 'source_y']).count()
+        df_common_neighbor_count = df_common_neighbor_count.reset_index()
+        # print df_common_neighbor_count
+
+        df_common_neighbor_count.rename(columns={'target': 'CN'}, inplace=True)
+
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_count, df_neighbor_count,
+                                                          left_on=['source_x'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor = df_common_neighbor_with_total_neighbor[
+            ['source_x', 'source_y', 'CN', 'nei_count']]
+        df_common_neighbor_with_total_neighbor = pd.merge(df_common_neighbor_with_total_neighbor, df_neighbor_count,
+                                                          left_on=['source_y'], right_on=['source'], how='left')
+
+        df_common_neighbor_with_total_neighbor['nei_mul_nei'] = df_common_neighbor_with_total_neighbor['nei_count_x'] * \
+                                                                df_common_neighbor_with_total_neighbor['nei_count_y']
+
+        # df_common_neighbor_with_total_neighbor['nei_mul_nei']=map(lambda x: pow(x,0.5),df_common_neighbor_with_total_neighbor['nei_mul_nei'])
+        df_common_neighbor_with_total_neighbor['similarity'] = df_common_neighbor_with_total_neighbor['CN'] / \
+                                                               df_common_neighbor_with_total_neighbor['nei_mul_nei']
+
+        df_LLHN_list = df_common_neighbor_with_total_neighbor[['source_x', 'source_y', 'similarity']].copy()
+        df_LLHN_list.rename(columns={'source_x': 'source', 'source_y': 'target'}, inplace=True)
+        return df_LLHN_list
+
+    def cal_save_all_similarity(self, data_name):
+        similarity_dir = '../temp/similarity_directory'
+
+        if os.path.exists(similarity_dir):
+            pass
+        else:
+            os.mkdir(similarity_dir)
+
+        save_dir = similarity_dir + '/' + data_name
+        if os.path.exists(save_dir):
+            pass
+        else:
+            os.mkdir(save_dir)
+        """   
+        1) common neighbours (CN)
+        2) adamic-adar index (AA)
+        3) resource allocation (RA)
+        4) Resource Allocation Based on Common Neighbor Interactions (RA-CNI)
+        5) Preferential Attachment Index (PI)
+        6) Jaccard Coefficient
+        7) Salton Index (SA)
+        8) The Sørensen Index (SO)
+        9) Hub Promoted Index (HPI)
+        10) Hub Depressed Index (HDI)
+        11) Local Leicht-Holme-Newman Index (LLHN)
+        """
+
+        similarity_name_list = ['CN', 'AA', 'RA', 'RA_CNI', 'PA', 'JC', 'SA', 'SO', 'HPI', 'HDI', 'LLHN']
+        similarity_function_list = [self.cal_CN, self.cal_AA, self.cal_RA, self.cal_RA_CNI, self.cal_PA, self.cal_JC,
+                                    self.cal_SA, self.cal_SO, self.cal_HPI, self.cal_HDI, self.cal_LLHN]
+
+        for i, sim_func in enumerate(similarity_function_list):
+            print('similarity calculation', sim_func.__name__)
+            df_similarity_list = sim_func()
+            save_file_name = save_dir + '/' + data_name + '_' + similarity_name_list[i]
+            df_similarity_list.to_csv(save_file_name, index=False, sep=' ')
 
 
 def test_similarity():
